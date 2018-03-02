@@ -13,4 +13,5 @@ This template will deploy an AWS Lambda function that will respond to CloudTrail
 1. Click **Create** to start the creation of the stack.
 1. Wait until the stack reaches the state **CREATE_COMPLETE**
 
+#### Diagram
 ![Diagram](./img/S3_AutoLock.png?raw=true "diagram")
