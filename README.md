@@ -8,3 +8,9 @@ This template will deploy an AWS Lambda function that will respond to CloudTrail
 1. Click **Next** to proceed with the next step of the wizard.
 1. Specify a name and all parameters for the stack.
 1. Click **Next** to proceed with the next step of the wizard.
+1. Click **Next** to skip the **Options** step of the wizard.
+1. Check the **I acknowledge that this template might cause AWS CloudFormation to create IAM resources.** checkbox.
+1. Click **Create** to start the creation of the stack.
+1. Wait until the stack reaches the state **CREATE_COMPLETE**
+
+![Diagram](./img/S3_AutoLock.png?raw=true "diagram")
