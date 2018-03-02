@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template deploys a Lambda function to set S3 buckets ACL to private in response to CloudTrail Event: CreateBucket'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Prerequisites
+        Parameters:
+          - IsCloudTrailEnabled
+    ParameterLabels:
+      IsCloudTrailEnabled:
+        default: Is CloudTrail already enabled in this region? CloudTrail is a requirement
+          for Cloudwatch Events. If not enabled, please enable CloudTrail before proceeding.
+Parameters:
+  IsCloudTrailEnabled:
+    Description: Specify if CloudTrail is enabled in the current region
+    Type: String
+    Default: 'Yes'
+    AllowedValues:
+      - 'Yes'
+      - 'No'
+Conditions:
+  CreateResources: !Equals [!Ref 'IsCloudTrailEnabled', 'Yes']
+Resources:
+  S3EventRule:
+    Type: AWS::Events::Rule
+    Condition: CreateResources
+    Properties:
+      Description: Trigger a Lambda function anytime a new S3 bucket is created to
+        detect public access
+      EventPattern:
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - s3.amazonaws.com
+          eventName:
+            - CreateBucket
+      Name: Create-S3-Bucket-Event
+      State: ENABLED
+      Targets:
+        - Arn: !Ref 'ProductionAlias'
+          Id: Production
+  CFAutoDetect:
+    Type: AWS::Lambda::Function
+    Condition: CreateResources
+    Properties:
+      Code:
+        S3Bucket: inf-automated-security
+        S3Key: autolock.zip
+      Description: This function detects public S3 bucket permissions in response
+        to CloudTrail Events.
+      Handler: index.lambda_handler
+      Role: !GetAtt 'LambdaAutoDetectRole.Arn'
+      Runtime: python2.7
+      Timeout: '60'
+  StableVersion:
+    Type: AWS::Lambda::Version
+    Condition: CreateResources
+    Properties:
+      FunctionName: !Ref 'CFAutoDetect'
+      Description: Stable version
+  ProductionAlias:
+    Type: AWS::Lambda::Alias
+    Condition: CreateResources
+    Properties:
+      FunctionName: !Ref 'CFAutoDetect'
+      FunctionVersion: !GetAtt 'StableVersion.Version'
+      Name: PROD
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref 'ProductionAlias'
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt 'S3EventRule.Arn'
+  LambdaAutoDetectRole:
+    Type: AWS::IAM::Role
+    Condition: CreateResources
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaAutoDetectS3ACL
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowCloudTrailLookupEvents
+                Effect: Allow
+                Action:
+                  - cloudtrail:LookupEvents
+                Resource:
+                  - '*'
+              - Sid: AllowS3DetectPlusLogging
+                Effect: Allow
+                Action:
+                  - s3:*
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - '*'
+  S3DetectACLGroup:
+    Type: AWS::IAM::Group
+    Condition: CreateResources
+  S3DetectRestrictionsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: CreateResources
+    Properties:
+      Description: This policy allows Administration for S3 Bucket permission remediation
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AdminS3Buckets
+            Effect: Allow
+            Action:
+              - s3:*
+            Resource:
+              - '*'
+      Groups:
+        - !Ref 'S3DetectACLGroup'
